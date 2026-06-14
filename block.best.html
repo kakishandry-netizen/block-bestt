@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Block Game</title>
+
+<style>
+body{
+margin:0;
+background:#1e1e2f;
+color:white;
+font-family:Arial, sans-serif;
+text-align:center;
+overflow:hidden;
+position: fixed;
+width: 100%;
+height: 100%;
+/* Запрещаем выделение текста и жесты браузера на мобилках */
+-webkit-touch-callout: none;
+-webkit-user-select: none;
+user-select: none;
+touch-action: none;
+}
+
+/* MENU & GAME OVER SCREEN */
+#menu, #gameover-screen {
+position:fixed;
+inset:0;
+background:#111;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+gap:15px;
+z-index:10;
+}
+
+#gameover-screen {
+background: rgba(17, 17, 17, 0.9);
+display: none;
+z-index: 12;
+}
+
+button{
+padding:12px 24px;
+font-size:18px;
+cursor:pointer;
+border: none;
+background: #4e54c8;
+color: white;
+border-radius: 5px;
+transition: 0.2s;
+/* Кнопки на мобильных должны нажиматься легко */
+touch-action: manipulation; 
+}
+
+button:hover {
+background: #243b55;
+}
+
+/* Верхняя панель управления во время игры */
+.game-header {
+display: flex;
+justify-content: center;
+align-items: center;
+gap: 30px;
+margin-top: 15px;
+margin-bottom: 10px;
+}
+
+#menuBtn {
+padding: 8px 15px;
+font-size: 16px;
+background: #555;
+}
+#menuBtn:hover {
+background: #777;
+}
+
+/* SETTINGS */
+#settings{
+position:fixed;
+inset:0;
+background:#000000cc;
+display:none;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+gap:10px;
+z-index:11;
+}
+
+/* ⭐ ИЗМЕНЕНО ДЛЯ МОБИЛЬНЫХ: Адаптивное игровое поле */
+#board{
+width: 90vw;
+height: 90vw;
+max-width: 450px;
+max-height: 450px;
+margin: 10px auto;
+display:grid;
+grid-template-columns:repeat(10,1fr);
+grid-template-rows:repeat(10,1fr);
+border:4px solid white;
+background: #111;
+touch-action: none;
+}
+
+.cell{
+border:1px solid #444;
+transition: 0.1s;
+box-sizing: border-box;
+}
+
+.preview-ok{background:rgba(0,255,0,0.4)!important;}
+.preview-bad{background:rgba(255,0,0,0.4)!important;}
+
+.hover-cell{
+outline:2px solid #fff;
+box-sizing:border-box;
+}
+
+#pieces{
+display:flex;
+justify-content:center;
+gap:15px;
+flex-wrap:wrap;
+min-height: 90px;
+margin-top: 10px;
+padding: 0 10px;
+}
+
+/* ⭐ ИЗМЕНЕНО ДЛЯ МОБИЛЬНЫХ: Адаптивные фигурки */
+.piece{
+padding: 8px;
+background:#333;
+cursor:pointer;
+min-height: 70px;
+display: flex;
+align-items: center;
+justify-content: center;
+border:2px solid transparent;
+border-radius: 4px;
+touch-action: manipulation;
+}
+
+.piece.active{border:2px solid yellow;}
+
+.mini{
+display:grid;
+gap:2px;
+}
+
+/* ⭐ ИЗМЕНЕНО ДЛЯ МОБИЛЬНЫХ: Размер мини-блоков под разные экраны */
+.mini div{
+width: 4.5vw;
+height: 4.5vw;
+max-width: 16px;
+max-height: 16px;
+}
+
+/* Анимация исчезновения блоков */
+@keyframes popOut {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        background-color: #fff !important;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+.clear-animation {
+    animation: popOut 0.4s ease-out forwards;
+    z-index: 2;
+}
+</style>
+</head>
+
+<body>
+
+<audio id="bgm" loop src="music.mp3"></audio>
+<audio id="sndClick" src="https://actions.google.com/sounds/v1/ui/click_on.ogg" preload="auto"></audio>
+<audio id="sndPlace" src="https://actions.google.com/sounds/v1/digital_watch/digital_watch_alarm_long.ogg" preload="auto"></audio>
+<audio id="sndClear" src="https://actions.google.com/sounds/v1/science_fiction/ambient_space_machine.ogg" preload="auto"></audio>
+
+<div id="menu">
+<h1 id="title">Block Game</h1>
+<button onclick="playClick(); startGame()" id="playBtn">Играть</button>
+<button onclick="playClick(); openSettings()" id="settingsBtn">Настройки</button>
+</div>
+
+<div id="gameover-screen">
+<h1 id="goTitle" style="color: #ff4a4a;">Ты проиграл!</h1>
+<p id="goScoreText" style="font-size: 20px;">Ваш счет: <span id="finalScore">0</span></p>
+<button onclick="playClick(); restartGame()" id="restartBtn">Играть снова</button>
+</div>
+
+<div id="settings">
+<h2>Настройки</h2>
+
+<label>Громкость</label>
+<input type="range" min="0" max="1" step="0.01" value="0.5"
+oninput="setVolume(this.value)">
+
+<label>Язык</label>
+<select onchange="playClick(); setLang(this.value)">
+<option value="ru">Русский</option>
+<option value="ua">Українська</option>
+<option value="en">English</option>
+</select>
+
+<button onclick="playClick(); closeSettings()">OK</button>
+</div>
+
+<div class="game-header">
+<button onclick="playClick(); backToMenu()" id="menuBtn">В меню</button>
+<h2 id="score" style="margin: 0;">0</h2>
+</div>
+
+<div id="board"></div>
+<div id="pieces"></div>
+
+<script>
+
+const SIZE=10;
+
+let board=[];
+let boardColors=[];
+let pieces=[];
+let selected=null;
+
+let hoverX=-1;
+let hoverY=-1;
+
+let score=0;
+let isGameInitialized=false; 
+let isAnimating = false; 
+let soundVolume = 0.5; // Общая громкость звуковых эффектов
+
+const boardEl=document.getElementById("board");
+const piecesEl=document.getElementById("pieces");
+const bgm=document.getElementById("bgm");
+const gameOverScreen = document.getElementById("gameover-screen");
+
+// Ссылки на аудио-элементы звуков
+const sndClick = document.getElementById("sndClick");
+const sndPlace = document.getElementById("sndPlace");
+const sndClear = document.getElementById("sndClear");
+
+/* ===== Вспомогательные функции для воспроизведения звуков ===== */
+function playClick() {
+    sndClick.currentTime = 0;
+    sndClick.volume = soundVolume;
+    sndClick.play().catch(()=>{});
+}
+
+function playPlace() {
+    sndPlace.currentTime = 0;
+    sndPlace.volume = soundVolume;
+    sndPlace.play().catch(()=>{});
+}
+
+function playClear() {
+    sndClear.currentTime = 0;
+    sndClear.volume = soundVolume;
+    sndClear.play().catch(()=>{});
+}
+
+/* ===== LANG ===== */
+const T={
+ru:{play:"Играть",settings:"Настройки",title:"Block Game", lose:"Ты проиграл!", finalScore:"Ваш счет: ", restart:"Играть снова", toMenu:"В меню"},
+ua:{play:"Грати",settings:"Налаштування",title:"Block Game", lose:"Ти програв!", finalScore:"Твій рахунок: ", restart:"Грати знову", toMenu:"В меню"},
+en:{play:"Play",settings:"Settings",title:"Block Game", lose:"Game Over!", finalScore:"Your score: ", restart:"Play Again", toMenu:"Menu"}
+};
+
+let lang="ru";
+
+function applyLang(){
+document.getElementById("playBtn").innerText=T[lang].play;
+document.getElementById("settingsBtn").innerText=T[lang].settings;
+document.getElementById("title").innerText=T[lang].title;
+document.getElementById("goTitle").innerText=T[lang].lose;
+document.getElementById("restartBtn").innerText=T[lang].restart;
+document.getElementById("menuBtn").innerText=T[lang].toMenu;
+}
+
+function setLang(l){
+lang=l;
+applyLang();
+}
+
+/* ===== MENU ===== */
+function startGame(){
+document.getElementById("menu").style.display="none";
+gameOverScreen.style.display="none";
+bgm.volume = soundVolume;
+bgm.play().catch(()=>{});
+
+if(!isGameInitialized) {
+    init();
+    newPieces();
+    isGameInitialized = true;
+}
+}
+
+function backToMenu() {
+document.getElementById("menu").style.display="flex";
+selected = null;
+clearPreview();
+}
+
+function restartGame() {
+gameOverScreen.style.display="none";
+score = 0;
+document.getElementById("score").innerText = score;
+init();
+newPieces();
+isGameInitialized = true;
+}
+
+function openSettings(){
+document.getElementById("settings").style.display="flex";
+}
+
+function closeSettings(){
+document.getElementById("settings").style.display="none";
+}
+
+function setVolume(v){
+soundVolume = parseFloat(v);
+bgm.volume = soundVolume;
+}
+
+/* ===== GAME ===== */
+
+const shapes=[
+{c:"#0ff",b:[[0,0],[1,0],[2,0],[3,0]]},
+{c:"#ff0",b:[[0,0],[1,0],[0,1],[1,1]]},
+{c:"#f0f",b:[[0,0],[1,0],[2,0],[1,1]]},
+{c:"#f80",b:[[0,0],[0,1],[0,2],[1,2]]},
+{c:"#0f0",b:[[1,0],[2,0],[0,1],[1,1]]}
+];
+
+function init(){
+board=[];
+boardColors=[];
+boardEl.innerHTML="";
+selected=null;
+isAnimating = false;
+
+for(let y=0;y<SIZE;y++){
+board[y]=[];
+boardColors[y]=[];
+
+for(let x=0;x<SIZE;x++){
+board[y][x]=0;
+boardColors[y][x]="transparent";
+
+let c=document.createElement("div");
+c.className="cell";
+
+// Поддерживаем и клики, и мобильные тапы
+c.onclick=(e)=> { e.preventDefault(); place(x,y); };
+
+boardEl.appendChild(c);
+}
+}
+}
+
+function newPieces(){
+pieces=[];
+piecesEl.innerHTML="";
+
+for(let i=0;i<3;i++){
+let s=shapes[Math.random()*shapes.length|0];
+pieces.push(s);
+
+let d=document.createElement("div");
+d.className="piece";
+d.onclick=()=> { playClick(); select(i,d); };
+
+drawMini(d,s);
+piecesEl.appendChild(d);
+}
+
+checkGameOver();
+}
+
+function select(i,el){
+if(isAnimating) return; 
+if(pieces[i] === null) return;
+selected=i;
+document.querySelectorAll(".piece")
+.forEach(p=>p.classList.remove("active"));
+el.classList.add("active");
+}
+
+function drawMini(el,s){
+let g=document.createElement("div");
+g.className="mini";
+g.style.gridTemplateColumns="repeat(4,1fr)";
+
+for(let y=0;y<4;y++){
+for(let x=0;x<4;x++){
+let c=document.createElement("div");
+let f=s.b.some(b=>b[0]==x && b[1]==y);
+c.style.background=f?s.c:"transparent";
+g.appendChild(c);
+}
+}
+el.appendChild(g);
+}
+
+function can(x,y,s){
+return s.b.every(b=>{
+let nx=x+b[0], ny=y+b[1];
+return nx>=0&&ny>=0&&nx<SIZE&&ny<SIZE&&!board[ny][nx];
+});
+}
+
+function place(x,y){
+if(isAnimating) return; 
+if(selected===null) return;
+
+let s=pieces[selected];
+if(!s) return;
+
+if(!can(x,y,s)) return;
+
+// Звук успешной установки блока
+playPlace();
+
+for(let b of s.b){
+let nx=x+b[0], ny=y+b[1];
+board[ny][nx]=1;
+boardColors[ny][nx]=s.c;
+}
+
+score+=s.b.length;
+
+const pieceElements = document.querySelectorAll(".piece");
+if(pieceElements[selected]) {
+    pieceElements[selected].style.visibility = "hidden";
+}
+
+pieces[selected]=null;
+selected=null;
+
+updateBoardUI();
+checkLinesAnimated();
+}
+
+function checkLinesAnimated(){
+let rowsToRemove = [];
+let colsToRemove = [];
+
+for(let y=0; y<SIZE; y++){
+    if(board[y].every(cell => cell === 1)){
+        rowsToRemove.push(y);
+    }
+}
+
+for(let x=0; x<SIZE; x++){
+    let colFull = true;
+    for(let y=0; y<SIZE; y++){
+        if(board[y][x] !== 1){
+            colFull = false;
+            break;
+        }
+    }
+    if(colFull) colsToRemove.push(x);
+}
+
+if(rowsToRemove.length > 0 || colsToRemove.length > 0) {
+    isAnimating = true; 
+
+    // Воспроизводим звук очистки ряда
+    playClear();
+
+    rowsToRemove.forEach(y => {
+        for(let x=0; x<SIZE; x++){
+            let cell = boardEl.children[y*SIZE+x];
+            cell.classList.add("clear-animation");
+        }
+        score += 100;
+    });
+
+    colsToRemove.forEach(x => {
+        for(let y=0; y<SIZE; y++){
+            let cell = boardEl.children[y*SIZE+x];
+            cell.classList.add("clear-animation");
+        }
+        score += 100;
+    });
+
+    document.getElementById("score").innerText = score;
+
+    setTimeout(() => {
+        rowsToRemove.forEach(y => {
+            for(let x=0; x<SIZE; x++){
+                board[y][x] = 0;
+                boardColors[y][x] = "transparent";
+            }
+        });
+
+        colsToRemove.forEach(x => {
+            for(let y=0; y<SIZE; y++){
+                board[y][x] = 0;
+                boardColors[y][x] = "transparent";
+            }
+        });
+
+        document.querySelectorAll(".cell").forEach(c => c.classList.remove("clear-animation"));
+        updateBoardUI();
+        
+        isAnimating = false; 
+        postTurnChecks();
+    }, 400);
+
+} else {
+    postTurnChecks();
+}
+}
+
+function postTurnChecks() {
+    if(pieces.every(p => p === null)) {
+        newPieces();
+    } else {
+        checkGameOver();
+    }
+}
+
+function updateBoardUI(){
+for(let y=0; y<SIZE; y++){
+    for(let x=0; x<SIZE; x++){
+        let cell = boardEl.children[y*SIZE+x];
+        cell.style.background = boardColors[y][x];
+    }
+}
+}
+
+function checkGameOver() {
+    if (pieces.every(p => p === null)) return;
+
+    let hasAnyMove = false;
+
+    for (let p of pieces) {
+        if (p === null) continue;
+
+        for (let y = 0; y < SIZE; y++) {
+            for (let x = 0; x < SIZE; x++) {
+                if (can(x, y, p)) {
+                    hasAnyMove = true;
+                    break;
+                }
+            }
+            if (hasAnyMove) break;
+        }
+        if (hasAnyMove) break;
+    }
+
+    if (!hasAnyMove) {
+        document.getElementById("finalScore").innerText = score;
+        document.getElementById("goScoreText").innerText = T[lang].finalScore + score;
+        gameOverScreen.style.display = "flex";
+        isGameInitialized = false; 
+    }
+}
+
+/* ===== PREVIEW + HOVER (Оптимизировано под тачскрины) ===== */
+
+function handleMove(clientX, clientY) {
+    if(isAnimating) return; 
+    if(document.getElementById("menu").style.display === "flex") return;
+    
+    let cell = document.elementFromPoint(clientX, clientY);
+    if(!cell || !cell.classList.contains("cell")) return;
+
+    let i = [...boardEl.children].indexOf(cell);
+    hoverX = i % SIZE;
+    hoverY = Math.floor(i / SIZE);
+    
+    drawPreview();
+}
+
+function drawPreview(){
+clearPreview();
+if(selected===null) return;
+
+let s=pieces[selected];
+let ok=true;
+
+for(let b of s.b){
+let x=hoverX+b[0];
+let y=hoverY+b[1];
+if(x<0||y<0||x>=SIZE||y>=SIZE||board[y][x]){
+ok=false;
+}
+}
+
+for(let b of s.b){
+let x=hoverX+b[0];
+let y=hoverY+b[1];
+if(x>=0 && x<SIZE && y>=0 && y<SIZE) {
+    let cell=boardEl.children[y*SIZE+x];
+    if(cell){
+        cell.classList.add(ok?"preview-ok":"preview-bad");
+    }
+}
+}
+
+let base=boardEl.children[hoverY*SIZE+hoverX];
+if(base) base.classList.add("hover-cell");
+}
+
+function clearPreview(){
+document.querySelectorAll(".cell")
+.forEach(c=>{
+c.classList.remove("preview-ok","preview-bad","hover-cell");
+});
+}
+
+/* mouse */
+boardEl.addEventListener("mousemove",(e)=>{
+    handleMove(e.clientX, e.clientY);
+});
+
+/* touch */
+boardEl.addEventListener("touchmove",(e)=>{
+    let t=e.touches[0];
+    handleMove(t.clientX, t.clientY);
+});
+
+/* START */
+applyLang();
+
+</script>
+
+</body>
+</html>
